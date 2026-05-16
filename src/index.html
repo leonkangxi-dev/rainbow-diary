@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; media-src 'self' blob:; script-src 'self' 'unsafe-inline'">
+  <title>彩虹日记本</title>
+  <link rel="stylesheet" href="css/global.css">
+  <link href="https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ======== Page: 首页选择 ======== -->
+  <div id="page-home" class="page active">
+    <div class="home-container">
+      <div class="app-title">
+        <span class="title-icon">🌈</span>
+        <h1>彩虹日记本</h1>
+      </div>
+      <div class="user-cards" id="userCards">
+        <!-- 由 JS 动态渲染 -->
+      </div>
+      <div class="home-actions">
+        <button class="btn btn-pink" onclick="router.go('settings-login')">
+          🔒 家长设置
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======== Page: 家长验证 ======== -->
+  <div id="page-settings-login" class="page">
+    <div class="auth-container">
+      <div class="auth-box">
+        <h2>🔒 家长验证</h2>
+        <div class="pin-input-group">
+          <input type="password" id="parentPinInput" class="pin-input" maxlength="4" inputmode="numeric" pattern="[0-9]*" placeholder="请输入家长密码">
+        </div>
+        <p id="parentPinError" class="error-msg hidden">密码错误，请重试</p>
+        <div class="btn-row">
+          <button class="btn btn-gray" onclick="router.go('home')">返回</button>
+          <button class="btn btn-pink" onclick="auth.verifyParentPin()">确认</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======== Page: 家长设置 ======== -->
+  <div id="page-settings" class="page">
+    <div class="settings-container">
+      <div class="page-header">
+        <button class="btn-back" onclick="router.go('home')">← 返回</button>
+        <h2>⚙️ 家长设置</h2>
+      </div>
+
+      <div class="settings-section">
+        <h3>🎤 语音输入</h3>
+        <div class="toggle-row">
+          <span>开启语音输入（孩子写日记时可使用语音）</span>
+          <label class="toggle">
+            <input type="checkbox" id="voiceToggle" onchange="settings.toggleVoice()">
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <h3>👨‍👩‍👧‍👦 管理孩子账号</h3>
+        <div class="child-list" id="childList">
+          <!-- 由 JS 动态渲染 -->
+        </div>
+        <button class="btn btn-blue btn-sm" onclick="settings.showAddChild()">+ 添加孩子</button>
+      </div>
+
+      <div class="settings-section">
+        <h3>🔑 修改家长密码</h3>
+        <div class="pin-input-group">
+          <input type="password" id="newParentPin" class="pin-input" maxlength="4" inputmode="numeric" pattern="[0-9]*" placeholder="新密码(4位数字)">
+          <button class="btn btn-blue btn-sm" onclick="settings.changeParentPin()">确认修改</button>
+        </div>
+        <p id="pinChangeMsg" class="success-msg hidden">修改成功！</p>
+      </div>
+
+      <div class="settings-section">
+        <h3>🌐 网络服务</h3>
+        <p class="setting-desc">开启后，家里其他设备可通过浏览器访问</p>
+        <div class="toggle-row">
+          <span>启动局域网服务</span>
+          <label class="toggle">
+            <input type="checkbox" id="serverToggle" onchange="settings.toggleServer()">
+            <span class="slider"></span>
+          </label>
+        </div>
+        <p id="serverStatus" class="setting-desc hidden"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======== Page: 孩子PIN登录 ======== -->
+  <div id="page-child-login" class="page">
+    <div class="auth-container">
+      <div class="auth-box">
+        <h2 id="childLoginName">👋 你好！</h2>
+        <p>请输入你的密码</p>
+        <div class="pin-input-group">
+          <input type="password" id="childPinInput" class="pin-input" maxlength="4" inputmode="numeric" pattern="[0-9]*" placeholder="4位数字密码">
+        </div>
+        <p id="childPinError" class="error-msg hidden">密码错误，再试一次～</p>
+        <div class="btn-row">
+          <button class="btn btn-gray" onclick="router.go('home')">返回</button>
+          <button class="btn btn-pink" onclick="auth.verifyChildPin()">进入 ✨</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======== Page: 书架 ======== -->
+  <div id="page-bookshelf" class="page">
+    <div class="bookshelf-container">
+      <div class="page-header">
+        <button class="btn-back" onclick="router.go('home')">← 退出</button>
+        <h2 id="bookshelfTitle">📚 我的日记本</h2>
+        <span id="streakBadge" class="streak-badge hidden"></span>
+        <span id="bookshelfUser" class="user-badge"></span>
+      </div>
+
+      <div class="bookshelf-grid" id="bookshelfGrid">
+        <!-- 由 JS 动态渲染 -->
+      </div>
+
+      <!-- 新建日记本弹窗 -->
+      <div id="bookModal" class="modal hidden">
+        <div class="modal-content">
+          <span class="modal-close" onclick="book.hideModal()">&times;</span>
+          <h3 id="bookModalTitle">📖 新建日记本</h3>
+          <input type="text" id="bookNameInput" class="input-field" placeholder="给日记本取个名字吧～" maxlength="20">
+          <p>选择封面角色：</p>
+          <div class="character-select" id="characterSelect" onclick="book.onCharacterClick(event)">
+            <!-- 由 JS 动态渲染 -->
+          </div>
+          <p>是否加密：</p>
+          <label class="toggle-row">
+            <span>设置密码保护</span>
+            <label class="toggle">
+              <input type="checkbox" id="bookLockToggle" onchange="book.toggleLock()">
+              <span class="slider"></span>
+            </label>
+          </label>
+          <div id="bookLockInput" class="hidden pin-input-group" style="margin-top:8px">
+            <input type="password" id="bookPinInput" class="pin-input" maxlength="4" inputmode="numeric" placeholder="4位数字密码">
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-gray" onclick="book.hideModal()">取消</button>
+            <button class="btn btn-pink" onclick="book.save()">创建 ✨</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======== Page: 条目列表 ======== -->
+  <div id="page-entries" class="page">
+    <div class="entries-container">
+      <div class="page-header">
+        <button class="btn-back" onclick="router.go('bookshelf')">← 返回</button>
+        <h2 id="entriesTitle">📝 日记</h2>
+      </div>
+
+      <div class="entries-toolbar">
+        <button class="btn btn-pink" onclick="router.go('editor')">✏️ 写日记</button>
+      </div>
+
+      <div class="entries-list" id="entriesList">
+        <!-- 由 JS 动态渲染 -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ======== Page: 编辑器 ======== -->
+  <div id="page-editor" class="page">
+    <div class="editor-container">
+      <div class="page-header">
+        <button class="btn-back" onclick="editor.cancel()">← 返回</button>
+        <h2 id="editorTitle">✏️ 写日记</h2>
+        <button class="btn btn-pink" onclick="editor.save()">💾 保存</button>
+      </div>
+
+      <div class="editor-form">
+        <div class="form-row">
+          <label>📅 日期</label>
+          <input type="date" id="entryDate" class="input-field">
+        </div>
+
+        <div class="form-row">
+          <label>🌤 天气</label>
+          <div class="icon-select" id="weatherSelect">
+            <span class="icon-option" data-value="" onclick="editor.selectWeather(this,'')">❓</span>
+            <span class="icon-option" data-value="sunny" onclick="editor.selectWeather(this,'sunny')">☀️</span>
+            <span class="icon-option" data-value="cloudy" onclick="editor.selectWeather(this,'cloudy')">⛅</span>
+            <span class="icon-option" data-value="overcast" onclick="editor.selectWeather(this,'overcast')">☁️</span>
+            <span class="icon-option" data-value="rainy" onclick="editor.selectWeather(this,'rainy')">🌧</span>
+            <span class="icon-option" data-value="snowy" onclick="editor.selectWeather(this,'snowy')">❄️</span>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <label>😊 心情</label>
+          <div class="icon-select" id="moodSelect">
+            <span class="icon-option" data-value="" onclick="editor.selectMood(this,'')">❓</span>
+            <span class="icon-option" data-value="happy" onclick="editor.selectMood(this,'happy')">😊</span>
+            <span class="icon-option" data-value="sad" onclick="editor.selectMood(this,'sad')">😢</span>
+            <span class="icon-option" data-value="angry" onclick="editor.selectMood(this,'angry')">😡</span>
+            <span class="icon-option" data-value="calm" onclick="editor.selectMood(this,'calm')">😌</span>
+            <span class="icon-option" data-value="love" onclick="editor.selectMood(this,'love')">🥰</span>
+            <span class="icon-option" data-value="surprise" onclick="editor.selectMood(this,'surprise')">😱</span>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <label>📍 地点</label>
+          <input type="text" id="entryLocation" class="input-field" placeholder="在哪儿呢？如：学校、外婆家" maxlength="30">
+        </div>
+
+        <div class="form-row">
+          <label>👥 人物</label>
+          <input type="text" id="entryPeople" class="input-field" placeholder="和谁一起？如：妈妈、小明" maxlength="50">
+        </div>
+
+        <div class="form-row voice-row hidden" id="voiceRow">
+          <label>🎤 语音输入</label>
+          <div class="voice-controls">
+            <button class="btn btn-voice" id="voiceBtn" onclick="voiceRecorder.toggle()">
+              🎤 开始录音
+            </button>
+            <span id="voiceStatus" class="voice-status"></span>
+          </div>
+          <div class="voice-wave hidden" id="voiceWave">
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <label>📝 日记内容</label>
+          <textarea id="entryContent" class="input-textarea" placeholder="今天发生了什么有趣的事？写下来吧～" maxlength="2000"></textarea>
+          <span class="char-count"><span id="charCount">0</span>/2000</span>
+        </div>
+
+        <div class="form-row">
+          <label>✨ 贴纸</label>
+          <div class="icon-select" id="stickerSelect">
+            <span class="icon-option" data-value="" onclick="editor.selectSticker(this,'')">🚫</span>
+            <span class="icon-option" data-value="star" onclick="editor.selectSticker(this,'star')">⭐</span>
+            <span class="icon-option" data-value="heart" onclick="editor.selectSticker(this,'heart')">❤️</span>
+            <span class="icon-option" data-value="flower" onclick="editor.selectSticker(this,'flower')">🌸</span>
+            <span class="icon-option" data-value="rainbow" onclick="editor.selectSticker(this,'rainbow')">🌈</span>
+            <span class="icon-option" data-value="cake" onclick="editor.selectSticker(this,'cake')">🎂</span>
+            <span class="icon-option" data-value="butterfly" onclick="editor.selectSticker(this,'butterfly')">🦋</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======== 通用确认弹窗 ======== -->
+  <div id="confirmModal" class="modal hidden">
+    <div class="modal-content modal-sm">
+      <h3 id="confirmTitle">确认</h3>
+      <p id="confirmMsg">确定要执行此操作吗？</p>
+      <div class="btn-row">
+        <button class="btn btn-gray" onclick="dialog.cancel()">取消</button>
+        <button class="btn btn-danger" id="confirmBtn" onclick="dialog.confirm()">确定</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======== 添加孩子弹窗 ======== -->
+  <div id="addChildModal" class="modal hidden">
+    <div class="modal-content modal-sm">
+      <span class="modal-close" onclick="settings.hideAddChild()">&times;</span>
+      <h3>👶 添加孩子</h3>
+      <input type="text" id="childNameInput" class="input-field" placeholder="孩子的名字" maxlength="10">
+      <p>选择头像：</p>
+      <div class="avatar-select" id="avatarSelect" onclick="settings.onAvatarClick(event)">
+        <span class="avatar-option" data-avatar="🐱">🐱</span>
+        <span class="avatar-option" data-avatar="🐶">🐶</span>
+        <span class="avatar-option" data-avatar="🐰">🐰</span>
+        <span class="avatar-option" data-avatar="🐼">🐼</span>
+        <span class="avatar-option" data-avatar="🦊">🦊</span>
+        <span class="avatar-option" data-avatar="🐸">🐸</span>
+        <span class="avatar-option" data-avatar="🐷">🐷</span>
+        <span class="avatar-option" data-avatar="🐨">🐨</span>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-gray" onclick="settings.hideAddChild()">取消</button>
+        <button class="btn btn-pink" onclick="settings.addChild()">添加</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="js/app.js"></script>
+</body>
+</html>

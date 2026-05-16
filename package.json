@@ -1,0 +1,64 @@
+{
+  "name": "rainbow-diary",
+  "version": "1.0.0",
+  "description": "🌈 彩虹日记本 - 给小学生用的可爱日记软件",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "server": "node server.js",
+    "build": "electron-builder --win",
+    "build:dir": "electron-builder --win --dir"
+  },
+  "dependencies": {
+    "docx": "^9.6.1",
+    "express": "^4.21.0",
+    "multer": "^2.1.1",
+    "sql.js": "^1.11.0"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "com.rainbow.diary",
+    "productName": "彩虹日记本",
+    "directories": {
+      "output": "dist"
+    },
+    "asar": false,
+    "files": [
+      "main.js",
+      "preload.js",
+      "server.js",
+      "src/**/*",
+      "database/**/*",
+      "node_modules/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "data/",
+        "to": "data/",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "彩虹日记本",
+      "language": "2052"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-便携版.${ext}"
+    },
+    "win": {
+      "target": [
+        "portable",
+        "nsis"
+      ],
+      "artifactName": "${productName}-${version}-setup.${ext}"
+    }
+  }
+}

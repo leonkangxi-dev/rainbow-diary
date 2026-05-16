@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>彩虹日记本 - 诊断</title></head>
+<body style="font-family:sans-serif;padding:40px;">
+<h1>✅ 服务器连接正常</h1>
+<p>如果你能看到这个页面，说明服务器已经成功运行！</p>
+<hr>
+<h2>下一步</h2>
+<p>请访问 <a href="/">首页</a> 进入彩虹日记本</p>
+<p>或者直接打开：<code>http://192.168.31.207:3000/</code></p>
+<hr>
+<h3>API 测试</h3>
+<div id="result"></div>
+<script>
+fetch('/api/settings')
+  .then(r => r.json())
+  .then(d => document.getElementById('result').innerText = 'API 正常: ' + JSON.stringify(d))
+  .catch(e => document.getElementById('result').innerText = 'API 失败: ' + e);
+</script>
+</body>
+</html>
