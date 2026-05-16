@@ -2,7 +2,6 @@ node_modules/
 dist/
 data/
 *.db
-彩虹日记本_项目文档.docx
 build-admin.ps1
 generate-doc.js
 server-log.txt
