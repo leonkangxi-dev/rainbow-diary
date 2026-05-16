@@ -92,7 +92,7 @@ function updateSettings(data) {
   for (const [key, val] of Object.entries(data)) {
     if (['parent_pin', 'voice_input_enabled', 'server_port'].includes(key)) {
       sets.push(`${key} = @${key}`);
-      params[key] = val;
+      params[`@${key}`] = val;
     }
   }
   if (sets.length === 0) return;

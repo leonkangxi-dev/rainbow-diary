@@ -10,9 +10,17 @@ const multer = require('multer');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// ======== Paths ========
+// ======== Paths (Cross-platform) ========
 // Use the same database as Electron desktop app so data is shared
-const ELECTRON_DB_DIR = path.join(os.homedir(), 'AppData', 'Roaming', 'rainbow-diary');
+const ELECTRON_DB_DIR = (() => {
+  if (process.platform === 'win32') {
+    return path.join(os.homedir(), 'AppData', 'Roaming', 'rainbow-diary');
+  }
+  if (process.platform === 'darwin') {
+    return path.join(os.homedir(), 'Library', 'Application Support', 'rainbow-diary');
+  }
+  return path.join(os.homedir(), '.local', 'share', 'rainbow-diary');
+})();
 const LOCAL_DATA_DIR = path.join(__dirname, 'data');
 
 let DATA_DIR, AUDIO_DIR, DB_PATH;
@@ -110,7 +118,7 @@ app.post('/api/settings', (req, res) => {
   const data = req.body;
   const sets = []; const params = {};
   for (const key of ['parent_pin', 'voice_input_enabled', 'server_port']) {
-    if (data[key] !== undefined) { sets.push(`${key} = @${key}`); params[key] = data[key]; }
+    if (data[key] !== undefined) { sets.push(`${key} = @${key}`); params[`@${key}`] = data[key]; }
   }
   if (sets.length === 0) return res.json({ ok: false });
   run(`UPDATE settings SET ${sets.join(', ')} WHERE id = 1`, params);

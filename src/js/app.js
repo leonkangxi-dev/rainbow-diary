@@ -198,6 +198,35 @@ const settings = {
   }
 };
 
+// ======== Child PIN Change ========
+const childSettings = {
+  showPinChange() {
+    document.getElementById('pinChangeOld').value = '';
+    document.getElementById('pinChangeNew').value = '';
+    document.getElementById('pinChangeOldError').classList.add('hidden');
+    document.getElementById('pinChangeModal').classList.remove('hidden');
+  },
+
+  hidePinChange() {
+    document.getElementById('pinChangeModal').classList.add('hidden');
+  },
+
+  async confirmPinChange() {
+    const oldPin = document.getElementById('pinChangeOld').value;
+    const newPin = document.getElementById('pinChangeNew').value;
+    if (!oldPin || oldPin.length !== 4) return alert('请输入旧密码');
+    if (!newPin || newPin.length !== 4) return alert('请输入4位数字的新密码');
+    const ok = await window.api.verifyUserPin(state.currentUser.id, oldPin);
+    if (!ok) {
+      document.getElementById('pinChangeOldError').classList.remove('hidden');
+      return;
+    }
+    await window.api.updateUserPin(state.currentUser.id, newPin);
+    this.hidePinChange();
+    alert('✅ 密码修改成功！');
+  }
+};
+
 // ======== Bookshelf ========
 const book = {
   editBookId: null,
@@ -356,7 +385,7 @@ const editor = {
       people: document.getElementById('entryPeople').value.trim(),
       content: document.getElementById('entryContent').value.trim(),
       sticker: state.selectedSticker,
-      audio_path: state.audioBlob ? 'saved' : ''
+      audio_path: ''
     };
     if (!data.entry_date) return alert('请选择日期～');
     if (!data.content) return alert('写点内容吧～');
@@ -414,7 +443,6 @@ function resetEditorForm() {
   document.getElementById('entryContent').value = '';
   document.getElementById('charCount').textContent = '0';
   document.querySelectorAll('.icon-option').forEach(el => el.classList.remove('selected'));
-  state.audioBlob = null;
   document.getElementById('voiceBtn').textContent = '🎤 开始录音';
   document.getElementById('voiceStatus').textContent = '';
   document.getElementById('voiceWave').classList.add('hidden');
@@ -429,7 +457,6 @@ async function loadEntryForEdit(id) {
   document.getElementById('entryPeople').value = entry.people || '';
   document.getElementById('entryContent').value = entry.content || '';
   document.getElementById('charCount').textContent = entry.content ? entry.content.length : 0;
-  state.audioBlob = !!entry.audio_path;
   state.selectedWeather = entry.weather || '';
   state.selectedMood = entry.mood || '';
   state.selectedSticker = entry.sticker || '';
@@ -516,8 +543,6 @@ const voiceRecorder = {
         if (e.data.size > 0) state.audioChunks.push(e.data);
       };
       state.mediaRecorder.onstop = () => {
-        const blob = new Blob(state.audioChunks, { type: 'audio/webm' });
-        state.audioBlob = blob;
         stream.getTracks().forEach(t => t.stop());
       };
       state.mediaRecorder.start();
