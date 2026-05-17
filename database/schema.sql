@@ -43,7 +43,8 @@ CREATE TABLE IF NOT EXISTS settings (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   parent_pin TEXT DEFAULT '1234',
   voice_input_enabled INTEGER DEFAULT 0,
-  server_port INTEGER DEFAULT 3000
+  server_port INTEGER DEFAULT 3000,
+  voice_duration INTEGER DEFAULT 30
 );
 
 CREATE TABLE IF NOT EXISTS achievements (

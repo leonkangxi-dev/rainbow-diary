@@ -32,6 +32,9 @@ contextBridge.exposeInMainWorld('api', {
   saveAudio: (buffer) => ipcRenderer.invoke('audio:save', buffer),
   getAudioPath: (entryId) => ipcRenderer.invoke('audio:getPath', entryId),
 
+  // App
+  getVersion: () => ipcRenderer.invoke('app:version'),
+
   // Achievements
   getAchievements: (userId) => ipcRenderer.invoke('achievements:list', userId),
   createAchievement: (data) => ipcRenderer.invoke('achievements:add', data),

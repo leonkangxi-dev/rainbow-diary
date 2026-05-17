@@ -58,6 +58,7 @@ async function initDb() {
   db.run('PRAGMA foreign_keys = ON');
   const schema = fs.readFileSync(SCHEMA_PATH, 'utf-8');
   db.run(schema);
+  try { db.run('ALTER TABLE settings ADD COLUMN voice_duration INTEGER DEFAULT 30'); } catch(e) {}
   saveDb();
 }
 
@@ -110,6 +111,10 @@ app.use((req, res, next) => {
 // ======== REST API ========
 
 // --- Settings ---
+app.get('/api/version', (req, res) => {
+  res.json({ version: require('./package.json').version });
+});
+
 app.get('/api/settings', (req, res) => {
   res.json(getOne('SELECT * FROM settings WHERE id = 1'));
 });
@@ -117,8 +122,10 @@ app.get('/api/settings', (req, res) => {
 app.post('/api/settings', (req, res) => {
   const data = req.body;
   const sets = []; const params = {};
-  for (const key of ['parent_pin', 'voice_input_enabled', 'server_port']) {
-    if (data[key] !== undefined) { sets.push(`${key} = @${key}`); params[`@${key}`] = data[key]; }
+  for (const key of ['parent_pin', 'voice_input_enabled', 'server_port', 'voice_duration']) {
+    if (data[key] !== undefined) {
+      sets.push(`${key} = @${key}`); params[`@${key}`] = data[key];
+    }
   }
   if (sets.length === 0) return res.json({ ok: false });
   run(`UPDATE settings SET ${sets.join(', ')} WHERE id = 1`, params);

@@ -27,6 +27,7 @@
           🔒 家长设置
         </button>
       </div>
+      <div class="version-label" id="versionHome"></div>
     </div>
   </div>
 
@@ -64,6 +65,19 @@
             <span class="slider"></span>
           </label>
         </div>
+        <div class="toggle-row" id="voiceDurationRow" style="margin-top:10px">
+          <span>录音时长</span>
+          <div class="radio-group">
+            <label class="radio-label">
+              <input type="radio" name="voiceDuration" value="30" onchange="settings.setDuration(30)">
+              30秒
+            </label>
+            <label class="radio-label">
+              <input type="radio" name="voiceDuration" value="60" onchange="settings.setDuration(60)">
+              60秒
+            </label>
+          </div>
+        </div>
       </div>
 
       <div class="settings-section">
@@ -95,6 +109,7 @@
         </div>
         <p id="serverStatus" class="setting-desc hidden"></p>
       </div>
+      <div class="version-label" id="versionSettings"></div>
     </div>
   </div>
 
@@ -256,15 +271,10 @@
             <button class="btn btn-voice" id="voiceBtn" onclick="voiceRecorder.toggle()">
               🎤 开始录音
             </button>
+            <span id="voiceTimer" class="voice-timer hidden"></span>
             <span id="voiceStatus" class="voice-status"></span>
           </div>
-          <div class="voice-wave hidden" id="voiceWave">
-            <div class="wave-bar"></div>
-            <div class="wave-bar"></div>
-            <div class="wave-bar"></div>
-            <div class="wave-bar"></div>
-            <div class="wave-bar"></div>
-          </div>
+          <div class="voice-history" id="voiceHistory"></div>
         </div>
 
         <div class="form-row">

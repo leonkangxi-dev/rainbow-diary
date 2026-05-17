@@ -124,6 +124,11 @@ ipcMain.handle('audio:getPath', (_event, entryId) => {
   return db.getAudioPath(entryId);
 });
 
+// --- App Info ---
+ipcMain.handle('app:version', () => {
+  return require('./package.json').version;
+});
+
 // ======== App Lifecycle ========
 
 app.whenReady().then(async () => {

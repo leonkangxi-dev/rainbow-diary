@@ -77,6 +77,8 @@ async function initialize() {
     'utf-8'
   );
   db.run(schema);
+  // Migrations for existing databases
+  try { db.run('ALTER TABLE settings ADD COLUMN voice_duration INTEGER DEFAULT 30'); } catch(e) {}
   saveDb();
 }
 
@@ -90,7 +92,7 @@ function updateSettings(data) {
   const sets = [];
   const params = {};
   for (const [key, val] of Object.entries(data)) {
-    if (['parent_pin', 'voice_input_enabled', 'server_port'].includes(key)) {
+    if (['parent_pin', 'voice_input_enabled', 'server_port', 'voice_duration'].includes(key)) {
       sets.push(`${key} = @${key}`);
       params[`@${key}`] = val;
     }

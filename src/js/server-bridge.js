@@ -55,6 +55,9 @@
     },
     getAudioPath: (entryId) => api('GET', `/api/entries/${entryId}`).then(e => e.audio_path),
 
+    // App
+    getVersion: () => api('GET', '/api/version').then(r => r.version),
+
     // Achievements
     getAchievements: (userId) => api('GET', `/api/users/${userId}/achievements`),
     createAchievement: (data) => api('POST', '/api/achievements', data),

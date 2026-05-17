@@ -7,6 +7,10 @@ const state = {
   selectedCharacter: 'hello-kitty',
   selectedAvatar: '🐱',
   voiceEnabled: false,
+  voiceDuration: 30,
+  voiceRemaining: 30,
+  voiceTranscript: '',
+  voiceTimerInterval: null,
   isRecording: false,
   recognition: null,
   audioChunks: [],
@@ -36,6 +40,7 @@ const router = {
 
   onHome() {
     renderUserCards();
+    setVersion('versionHome');
   },
 
   onBookshelf() {
@@ -61,8 +66,24 @@ const router = {
   onSettings() {
     settings.init();
     settings.renderChildren();
+    setVersion('versionSettings');
   }
 };
+
+// ======== Version ========
+let cachedVersion = null;
+async function setVersion(elementId) {
+  const el = document.getElementById(elementId);
+  if (!el) return;
+  if (!cachedVersion) {
+    try {
+      cachedVersion = await window.api.getVersion();
+    } catch (e) {
+      cachedVersion = '';
+    }
+  }
+  el.textContent = cachedVersion ? `v${cachedVersion}` : '';
+}
 
 // ======== Auth ========
 const auth = {
@@ -115,12 +136,22 @@ const settings = {
     const s = await window.api.getSettings();
     document.getElementById('voiceToggle').checked = !!s.voice_input_enabled;
     state.voiceEnabled = !!s.voice_input_enabled;
+    state.voiceDuration = s.voice_duration || 30;
+    const radios = document.getElementsByName('voiceDuration');
+    for (const r of radios) {
+      r.checked = parseInt(r.value) === state.voiceDuration;
+    }
   },
 
   async toggleVoice() {
     const enabled = document.getElementById('voiceToggle').checked ? 1 : 0;
     await window.api.updateSettings({ voice_input_enabled: enabled });
     state.voiceEnabled = !!enabled;
+  },
+
+  async setDuration(sec) {
+    state.voiceDuration = sec;
+    await window.api.updateSettings({ voice_duration: sec });
   },
 
   async renderChildren() {
@@ -445,7 +476,9 @@ function resetEditorForm() {
   document.querySelectorAll('.icon-option').forEach(el => el.classList.remove('selected'));
   document.getElementById('voiceBtn').textContent = '🎤 开始录音';
   document.getElementById('voiceStatus').textContent = '';
-  document.getElementById('voiceWave').classList.add('hidden');
+  document.getElementById('voiceTimer').classList.add('hidden');
+  document.getElementById('voiceHistory').innerHTML = '';
+  voiceRecorder.voiceHistory = [];
 }
 
 async function loadEntryForEdit(id) {
@@ -486,6 +519,8 @@ document.addEventListener('input', function(e) {
 
 // ======== Voice Recorder ========
 const voiceRecorder = {
+  voiceHistory: [],
+
   async toggle() {
     if (state.isRecording) {
       this.stopRecording();
@@ -500,41 +535,50 @@ const voiceRecorder = {
       return;
     }
     state.isRecording = true;
+    state.voiceTranscript = '';
+    state.voiceRemaining = state.voiceDuration || 30;
     document.getElementById('voiceBtn').textContent = '⏹ 停止录音';
+    document.getElementById('voiceTimer').textContent = this.formatTime(state.voiceRemaining);
+    document.getElementById('voiceTimer').classList.remove('hidden');
     document.getElementById('voiceStatus').textContent = '🎤 录音中...';
-    document.getElementById('voiceWave').classList.remove('hidden');
 
-    // Web Speech API for recognition
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     state.recognition = new SpeechRecognition();
     state.recognition.lang = 'zh-CN';
     state.recognition.continuous = true;
-    state.recognition.interimResults = true;
+    state.recognition.interimResults = false;
 
-    let finalTranscript = '';
     state.recognition.onresult = (event) => {
-      let interimTranscript = '';
       for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript;
         if (event.results[i].isFinal) {
-          finalTranscript += transcript;
-        } else {
-          interimTranscript += transcript;
+          state.voiceTranscript += event.results[i][0].transcript;
         }
       }
-      const current = document.getElementById('entryContent').value;
-      document.getElementById('entryContent').value = current + finalTranscript;
-      document.getElementById('charCount').textContent = document.getElementById('entryContent').value.length;
-      finalTranscript = '';
     };
 
     state.recognition.onerror = () => {
       this.stopRecording();
     };
 
+    state.recognition.onend = () => {
+      if (state.isRecording) {
+        // Recognition stopped but timer still running — restart it
+        try { state.recognition.start(); } catch (e) {}
+      }
+    };
+
     state.recognition.start();
 
-    // MediaRecorder for audio file
+    // Start countdown
+    state.voiceTimerInterval = setInterval(() => {
+      state.voiceRemaining--;
+      document.getElementById('voiceTimer').textContent = this.formatTime(state.voiceRemaining);
+      if (state.voiceRemaining <= 0) {
+        this.stopRecording();
+      }
+    }, 1000);
+
+    // Capture audio blob for history
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       state.mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
@@ -546,23 +590,110 @@ const voiceRecorder = {
         stream.getTracks().forEach(t => t.stop());
       };
       state.mediaRecorder.start();
-    } catch (err) {
-      console.log('Audio recording not available, text only');
-    }
+    } catch (err) {}
   },
 
   stopRecording() {
     state.isRecording = false;
-    document.getElementById('voiceBtn').textContent = '🎤 开始录音';
-    document.getElementById('voiceStatus').textContent = '✅ 录音完成';
-    document.getElementById('voiceWave').classList.add('hidden');
+    clearInterval(state.voiceTimerInterval);
+
     if (state.recognition) {
-      state.recognition.stop();
+      try { state.recognition.stop(); } catch (e) {}
       state.recognition = null;
     }
+
     if (state.mediaRecorder && state.mediaRecorder.state !== 'inactive') {
       state.mediaRecorder.stop();
     }
+
+    document.getElementById('voiceTimer').classList.add('hidden');
+    document.getElementById('voiceBtn').textContent = '🎤 开始录音';
+
+    if (state.voiceTranscript) {
+      // Append to textarea
+      const ta = document.getElementById('entryContent');
+      ta.value += (ta.value ? ' ' : '') + state.voiceTranscript;
+      document.getElementById('charCount').textContent = ta.value.length;
+
+      // Save to history
+      this.saveToHistory(state.voiceTranscript);
+    } else {
+      document.getElementById('voiceStatus').textContent = '未识别到语音';
+      setTimeout(() => { document.getElementById('voiceStatus').textContent = ''; }, 2000);
+    }
+  },
+
+  saveToTranscript(text) {
+    this.saveToHistory(text);
+  },
+
+  saveToHistory(text) {
+    const blob = state.audioChunks.length > 0 ? new Blob(state.audioChunks, { type: 'audio/webm' }) : null;
+    this.voiceHistory.unshift({ text, blob, time: Date.now() });
+    if (this.voiceHistory.length > 10) this.voiceHistory.pop();
+    this.renderHistory();
+  },
+
+  renderHistory() {
+    const container = document.getElementById('voiceHistory');
+    if (this.voiceHistory.length === 0) {
+      container.innerHTML = '';
+      return;
+    }
+    container.innerHTML = this.voiceHistory.map((item, idx) => `
+      <div class="voice-history-item">
+        <span class="vh-text" title="${this.escHtml(item.text)}">${this.escHtml(item.text)}</span>
+        <span class="vh-actions">
+          ${item.blob ? `<button class="vh-btn" onclick="voiceRecorder.playAudio(${idx})" title="播放">▶️</button>` : ''}
+          <button class="vh-btn" onclick="voiceRecorder.reRecord(${idx})" title="重新录音">🔄</button>
+          <button class="vh-btn" onclick="voiceRecorder.deleteHistory(${idx})" title="删除">❌</button>
+        </span>
+      </div>
+    `).join('');
+  },
+
+  async reRecord(idx) {
+    if (state.isRecording) return alert('正在录音中，请先停止');
+    document.getElementById('voiceStatus').textContent = '🔄 重新录音...';
+    state.voiceTranscript = '';
+    state.audioChunks = [];
+    await this.startRecording();
+    // Wait for recording to finish, then replace
+    const checkDone = setInterval(() => {
+      if (!state.isRecording) {
+        clearInterval(checkDone);
+        if (state.voiceTranscript) {
+          // Also insert at cursor position
+          const ta = document.getElementById('entryContent');
+          ta.value += (ta.value ? ' ' : '') + state.voiceTranscript;
+          document.getElementById('charCount').textContent = ta.value.length;
+        }
+      }
+    }, 200);
+  },
+
+  playAudio(idx) {
+    const item = this.voiceHistory[idx];
+    if (!item || !item.blob) return;
+    const url = URL.createObjectURL(item.blob);
+    const audio = new Audio(url);
+    audio.onended = () => URL.revokeObjectURL(url);
+    audio.play();
+  },
+
+  deleteHistory(idx) {
+    this.voiceHistory.splice(idx, 1);
+    this.renderHistory();
+  },
+
+  formatTime(sec) {
+    return `${Math.floor(sec / 60)}:${(sec % 60).toString().padStart(2, '0')}`;
+  },
+
+  escHtml(str) {
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
   }
 };
 
@@ -571,6 +702,7 @@ async function checkVoiceEnabled() {
   const s = await window.api.getSettings();
   if (s.voice_input_enabled) {
     row.classList.remove('hidden');
+    state.voiceDuration = s.voice_duration || 30;
   } else {
     row.classList.add('hidden');
   }
