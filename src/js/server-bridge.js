@@ -61,7 +61,59 @@
     // Achievements
     getAchievements: (userId) => api('GET', `/api/users/${userId}/achievements`),
     createAchievement: (data) => api('POST', '/api/achievements', data),
-    getUserStats: (userId) => api('GET', `/api/users/${userId}/stats`)
+    getUserStats: (userId) => api('GET', `/api/users/${userId}/stats`),
+
+    // LAN Server (server mode already has the server running)
+    startServer: () => Promise.resolve({ ok: true, url: window.location.origin }),
+    stopServer: () => Promise.resolve({ ok: true }),
+
+    // Speech Recognition
+    recognizeSpeech: async (audioBase64) => {
+      const settings = await api('GET', '/api/settings');
+      const res = await fetch(BASE + '/api/speech/recognize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          audio: audioBase64,
+          xf_appid: settings.xf_appid,
+          xf_apikey: settings.xf_apikey,
+          xf_apisecret: settings.xf_apisecret
+        })
+      });
+      return res.json();
+    },
+
+    // Backup / Restore
+    exportChildBackup: async (childId) => {
+      const data = await api('GET', `/api/backup/export/${childId}`);
+      if (!data.child) return { ok: false, error: '找不到该孩子' };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `彩虹日记本-备份-${data.child.name}-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(a.href);
+      return { ok: true };
+    },
+    importChildBackup: async () => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.json';
+      return new Promise(resolve => {
+        input.onchange = async () => {
+          if (!input.files[0]) return resolve({ ok: false, error: '已取消' });
+          try {
+            const text = await input.files[0].text();
+            const data = JSON.parse(text);
+            const result = await api('POST', '/api/backup/import', data);
+            resolve(result);
+          } catch(e) {
+            resolve({ ok: false, error: '文件格式错误' });
+          }
+        };
+        input.click();
+      });
+    }
   };
 
   console.log('🌈 彩虹日记本 - 浏览器模式已启动');

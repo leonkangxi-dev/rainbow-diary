@@ -60,6 +60,18 @@ function getOne(sql, params) {
   return rows.length > 0 ? rows[0] : null;
 }
 
+function runInsert(sql, params) {
+  db.exec('BEGIN');
+  const stmt = db.prepare(sql);
+  stmt.bind(params);
+  stmt.step();
+  stmt.free();
+  const r = db.exec('SELECT last_insert_rowid() as id');
+  db.exec('COMMIT');
+  saveDb();
+  return (r.length > 0 && r[0].values.length > 0) ? r[0].values[0][0] : 0;
+}
+
 async function initialize() {
   SQL = await initSqlJs({
     locateFile: file => path.join(__dirname, '..', '..', 'node_modules', 'sql.js', 'dist', file)
@@ -79,6 +91,9 @@ async function initialize() {
   db.run(schema);
   // Migrations for existing databases
   try { db.run('ALTER TABLE settings ADD COLUMN voice_duration INTEGER DEFAULT 30'); } catch(e) {}
+  try { db.run("ALTER TABLE settings ADD COLUMN xf_appid TEXT DEFAULT ''"); } catch(e) {}
+  try { db.run("ALTER TABLE settings ADD COLUMN xf_apikey TEXT DEFAULT ''"); } catch(e) {}
+  try { db.run("ALTER TABLE settings ADD COLUMN xf_apisecret TEXT DEFAULT ''"); } catch(e) {}
   saveDb();
 }
 
@@ -92,7 +107,7 @@ function updateSettings(data) {
   const sets = [];
   const params = {};
   for (const [key, val] of Object.entries(data)) {
-    if (['parent_pin', 'voice_input_enabled', 'server_port', 'voice_duration'].includes(key)) {
+    if (['parent_pin', 'voice_input_enabled', 'server_port', 'voice_duration', 'xf_appid', 'xf_apikey', 'xf_apisecret'].includes(key)) {
       sets.push(`${key} = @${key}`);
       params[`@${key}`] = val;
     }
@@ -114,12 +129,11 @@ function getUsers() {
 }
 
 function createUser(data) {
-  run(
+  const id = runInsert(
     'INSERT INTO users (name, avatar, role, pin) VALUES (?, ?, ?, ?)',
     [data.name, data.avatar || '🐱', data.role || 'child', data.pin || '']
   );
-  const rows = query('SELECT last_insert_rowid() as id');
-  return { id: rows[0].id };
+  return { id };
 }
 
 function deleteUser(id) {
@@ -145,12 +159,11 @@ function getBooks(userId) {
 }
 
 function createBook(data) {
-  run(
+  const id = runInsert(
     'INSERT INTO diary_books (user_id, title, character_id, theme_color, lock_pin) VALUES (?, ?, ?, ?, ?)',
     [data.user_id, data.title, data.character_id || 'hello-kitty', data.theme_color || '#FFB7C5', data.lock_pin || '']
   );
-  const rows = query('SELECT last_insert_rowid() as id');
-  return { id: rows[0].id };
+  return { id };
 }
 
 function updateBook(id, data) {
@@ -187,12 +200,11 @@ function getEntries(bookId) {
 }
 
 function createEntry(data) {
-  run(
+  const id = runInsert(
     'INSERT INTO diary_entries (book_id, entry_date, weather, mood, location, people, content, audio_path, sticker) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
     [data.book_id, data.entry_date, data.weather || '', data.mood || '', data.location || '', data.people || '', data.content || '', data.audio_path || '', data.sticker || '']
   );
-  const rows = query('SELECT last_insert_rowid() as id');
-  return { id: rows[0].id };
+  return { id };
 }
 
 function updateEntry(id, data) {
@@ -260,8 +272,74 @@ function getUserStats(userId) {
   };
 }
 
+// ======== Backup / Restore ========
+
+function exportChildBackup(childId) {
+  const child = getOne('SELECT id, name, avatar, role FROM users WHERE id = ? AND role = ?', [childId, 'child']);
+  if (!child) return null;
+  const books = getBooks(childId);
+  const booksData = books.map(b => {
+    const entries = getEntries(b.id);
+    return {
+      title: b.title,
+      character_id: b.character_id,
+      theme_color: b.theme_color,
+      lock_pin: b.lock_pin,
+      entries: entries.map(e => ({
+        entry_date: e.entry_date,
+        weather: e.weather,
+        mood: e.mood,
+        location: e.location,
+        people: e.people,
+        content: e.content,
+        sticker: e.sticker
+      }))
+    };
+  });
+  const achievements = getAchievements(childId);
+  return {
+    version: require('./package.json').version,
+    exportedAt: new Date().toISOString(),
+    child: { name: child.name, avatar: child.avatar, role: child.role },
+    books: booksData,
+    achievements: achievements.map(a => ({ badge_id: a.badge_id, badge_name: a.badge_name, badge_icon: a.badge_icon, earned_at: a.earned_at }))
+  };
+}
+
+function importChildBackup(data) {
+  try {
+    const existing = getOne('SELECT id FROM users WHERE name = ? AND role = ?', [data.child.name, 'child']);
+    const childName = existing ? data.child.name + '（恢复）' : data.child.name;
+    const result = createUser({ name: childName, avatar: data.child.avatar, role: 'child', pin: '1234' });
+    const newUserId = result.id;
+    for (const book of (data.books || [])) {
+      const bookResult = createBook({
+        user_id: newUserId, title: book.title,
+        character_id: book.character_id || 'hello-kitty',
+        theme_color: book.theme_color || '#FFB7C5',
+        lock_pin: book.lock_pin || ''
+      });
+      for (const entry of (book.entries || [])) {
+        createEntry({
+          book_id: bookResult.id, entry_date: entry.entry_date,
+          weather: entry.weather || '', mood: entry.mood || '',
+          location: entry.location || '', people: entry.people || '',
+          content: entry.content || '', sticker: entry.sticker || ''
+        });
+      }
+    }
+    for (const ach of (data.achievements || [])) {
+      addAchievement({ user_id: newUserId, badge_id: ach.badge_id, badge_name: ach.badge_name, badge_icon: ach.badge_icon });
+    }
+    return { childName };
+  } catch(e) {
+    return { childName: data.child.name, error: e.message };
+  }
+}
+
 module.exports = {
   initialize,
+  query, run, getOne, runInsert, saveDb, getDbPath,
   getSettings,
   updateSettings,
   verifyParentPin,
@@ -284,5 +362,8 @@ module.exports = {
   getAudioPath,
   getAchievements,
   addAchievement,
-  getUserStats
+  getUserStats,
+  getChildBackup: exportChildBackup,
+  exportChildBackup,
+  importChildBackup
 };

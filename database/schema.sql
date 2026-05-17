@@ -44,7 +44,10 @@ CREATE TABLE IF NOT EXISTS settings (
   parent_pin TEXT DEFAULT '1234',
   voice_input_enabled INTEGER DEFAULT 0,
   server_port INTEGER DEFAULT 3000,
-  voice_duration INTEGER DEFAULT 30
+  voice_duration INTEGER DEFAULT 30,
+  xf_appid TEXT DEFAULT '',
+  xf_apikey TEXT DEFAULT '',
+  xf_apisecret TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS achievements (

@@ -448,8 +448,24 @@ input, textarea, button {
 }
 
 .child-item .btn {
-  padding: 4px 12px;
-  font-size: 12px;
+  margin-left: 6px;
+}
+
+.child-actions {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.btn-backup {
+  background: var(--green);
+  color: var(--text);
+}
+.btn-backup:hover {
+  opacity: 0.85;
+}
+.btn-backup:hover {
+  opacity: 0.85;
 }
 
 /* ======== Bookshelf ======== */

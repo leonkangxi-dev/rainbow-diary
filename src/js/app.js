@@ -12,9 +12,6 @@ const state = {
   voiceTranscript: '',
   voiceTimerInterval: null,
   isRecording: false,
-  recognition: null,
-  audioChunks: [],
-  mediaRecorder: null,
   audioBlob: null,
   confirmCallback: null,
   selectedWeather: '',
@@ -141,6 +138,11 @@ const settings = {
     for (const r of radios) {
       r.checked = parseInt(r.value) === state.voiceDuration;
     }
+    if (document.getElementById('xfAppid')) {
+      document.getElementById('xfAppid').value = s.xf_appid || '';
+      document.getElementById('xfApiKey').value = s.xf_apikey || '';
+      document.getElementById('xfApiSecret').value = s.xf_apisecret || '';
+    }
   },
 
   async toggleVoice() {
@@ -152,6 +154,26 @@ const settings = {
   async setDuration(sec) {
     state.voiceDuration = sec;
     await window.api.updateSettings({ voice_duration: sec });
+  },
+
+  async setXfConfig() {
+    const appid = document.getElementById('xfAppid').value.trim();
+    const apikey = document.getElementById('xfApiKey').value.trim();
+    const apisecret = document.getElementById('xfApiSecret').value.trim();
+    await window.api.updateSettings({ xf_appid: appid, xf_apikey: apikey, xf_apisecret: apisecret });
+    const msg = document.getElementById('xfStatus');
+    if (appid && apikey && apisecret) {
+      msg.textContent = '✅ 讯飞配置已保存';
+      msg.className = 'success-msg';
+    } else if (!appid && !apikey && !apisecret) {
+      msg.textContent = '⚠️ 未配置讯飞凭据，语音识别将不可用';
+      msg.className = 'success-msg';
+    } else {
+      msg.textContent = '⚠️ 请完整填写 APPID、API Key 和 API Secret';
+      msg.className = 'success-msg';
+    }
+    msg.classList.remove('hidden');
+    setTimeout(() => msg.classList.add('hidden'), 3000);
   },
 
   async renderChildren() {
@@ -166,7 +188,10 @@ const settings = {
       <div class="child-item">
         <span class="avatar">${u.avatar}</span>
         <span class="name">${u.name}</span>
-        <button class="btn btn-danger btn-sm" onclick="settings.deleteChild(${u.id})">删除</button>
+        <div class="child-actions">
+          <button class="btn btn-backup btn-sm" onclick="backup.exportChild(${u.id})">💾 备份</button>
+          <button class="btn btn-danger btn-sm" onclick="settings.deleteChild(${u.id})">删除</button>
+        </div>
       </div>
     `).join('');
   },
@@ -216,15 +241,42 @@ const settings = {
     setTimeout(() => document.getElementById('pinChangeMsg').classList.add('hidden'), 2000);
   },
 
-  toggleServer() {
+  async toggleServer() {
     const checked = document.getElementById('serverToggle').checked;
     const status = document.getElementById('serverStatus');
     if (checked) {
-      status.textContent = '🌐 服务已启动，其他设备可通过 http://本机IP:3000 访问';
+      status.textContent = '⏳ 正在启动服务...';
       status.classList.remove('hidden');
+      const result = await window.api.startServer();
+      if (result.ok) {
+        status.textContent = `🌐 服务已启动：${result.url}（局域网：${result.lan}）`;
+      } else {
+        status.textContent = '❌ 启动失败：' + (result.error || '未知错误');
+        document.getElementById('serverToggle').checked = false;
+      }
     } else {
-      status.textContent = '';
-      status.classList.add('hidden');
+      await window.api.stopServer();
+      status.textContent = '🔴 服务已停止';
+      setTimeout(() => { status.textContent = ''; status.classList.add('hidden'); }, 3000);
+    }
+  }
+};
+
+// ======== Backup / Restore ========
+const backup = {
+  async exportChild(childId) {
+    const result = await window.api.exportChildBackup(childId);
+    if (!result.ok) {
+      if (result.error && result.error !== '已取消') alert(result.error);
+    }
+  },
+  async importBackup() {
+    const result = await window.api.importChildBackup();
+    if (result.ok) {
+      alert(`✅ 恢复成功！孩子「${result.childName}」已创建，可在下方管理孩子账号中查看。`);
+      settings.renderChildren();
+    } else if (result.error && result.error !== '已取消') {
+      alert('❌ ' + result.error);
     }
   }
 };
@@ -517,9 +569,12 @@ document.addEventListener('input', function(e) {
   }
 });
 
-// ======== Voice Recorder ========
+// ======== Voice Recorder (iFlytek) ========
 const voiceRecorder = {
   voiceHistory: [],
+  audioContext: null,
+  mediaStream: null,
+  pcmData: [],
 
   async toggle() {
     if (state.isRecording) {
@@ -530,8 +585,9 @@ const voiceRecorder = {
   },
 
   async startRecording() {
-    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-      alert('当前浏览器不支持语音识别，请使用 Chrome 浏览器');
+    const s = await window.api.getSettings();
+    if (!s.xf_appid || !s.xf_apikey || !s.xf_apisecret) {
+      alert('请先在家长设置中配置讯飞语音识别（APPID、API Key、API Secret）');
       return;
     }
     state.isRecording = true;
@@ -542,34 +598,30 @@ const voiceRecorder = {
     document.getElementById('voiceTimer').classList.remove('hidden');
     document.getElementById('voiceStatus').textContent = '🎤 录音中...';
 
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    state.recognition = new SpeechRecognition();
-    state.recognition.lang = 'zh-CN';
-    state.recognition.continuous = true;
-    state.recognition.interimResults = false;
-
-    state.recognition.onresult = (event) => {
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        if (event.results[i].isFinal) {
-          state.voiceTranscript += event.results[i][0].transcript;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      this.mediaStream = stream;
+      this.audioContext = new AudioContext({ sampleRate: 16000 });
+      const source = this.audioContext.createMediaStreamSource(stream);
+      const processor = this.audioContext.createScriptProcessor(4096, 1, 1);
+      this.pcmData = [];
+      processor.onaudioprocess = (e) => {
+        if (!state.isRecording) return;
+        const input = e.inputBuffer.getChannelData(0);
+        const pcm = new Int16Array(input.length);
+        for (let i = 0; i < input.length; i++) {
+          pcm[i] = Math.max(-32768, Math.min(32767, Math.round(input[i] * 32768)));
         }
-      }
-    };
+        this.pcmData.push(pcm);
+      };
+      source.connect(processor);
+      processor.connect(this.audioContext.destination);
+    } catch (err) {
+      document.getElementById('voiceStatus').textContent = '❌ 麦克风权限被拒绝';
+      state.isRecording = false;
+      return;
+    }
 
-    state.recognition.onerror = () => {
-      this.stopRecording();
-    };
-
-    state.recognition.onend = () => {
-      if (state.isRecording) {
-        // Recognition stopped but timer still running — restart it
-        try { state.recognition.start(); } catch (e) {}
-      }
-    };
-
-    state.recognition.start();
-
-    // Start countdown
     state.voiceTimerInterval = setInterval(() => {
       state.voiceRemaining--;
       document.getElementById('voiceTimer').textContent = this.formatTime(state.voiceRemaining);
@@ -577,59 +629,75 @@ const voiceRecorder = {
         this.stopRecording();
       }
     }, 1000);
-
-    // Capture audio blob for history
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      state.mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-      state.audioChunks = [];
-      state.mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) state.audioChunks.push(e.data);
-      };
-      state.mediaRecorder.onstop = () => {
-        stream.getTracks().forEach(t => t.stop());
-      };
-      state.mediaRecorder.start();
-    } catch (err) {}
   },
 
-  stopRecording() {
+  async stopRecording() {
     state.isRecording = false;
     clearInterval(state.voiceTimerInterval);
 
-    if (state.recognition) {
-      try { state.recognition.stop(); } catch (e) {}
-      state.recognition = null;
+    if (this.audioContext) {
+      try { this.audioContext.close(); } catch(e) {}
+      this.audioContext = null;
     }
-
-    if (state.mediaRecorder && state.mediaRecorder.state !== 'inactive') {
-      state.mediaRecorder.stop();
+    if (this.mediaStream) {
+      this.mediaStream.getTracks().forEach(t => t.stop());
+      this.mediaStream = null;
     }
 
     document.getElementById('voiceTimer').classList.add('hidden');
     document.getElementById('voiceBtn').textContent = '🎤 开始录音';
 
-    if (state.voiceTranscript) {
-      // Append to textarea
-      const ta = document.getElementById('entryContent');
-      ta.value += (ta.value ? ' ' : '') + state.voiceTranscript;
-      document.getElementById('charCount').textContent = ta.value.length;
-
-      // Save to history
-      this.saveToHistory(state.voiceTranscript);
-    } else {
-      document.getElementById('voiceStatus').textContent = '未识别到语音';
+    if (this.pcmData.length === 0) {
+      document.getElementById('voiceStatus').textContent = '未录制到音频';
       setTimeout(() => { document.getElementById('voiceStatus').textContent = ''; }, 2000);
+      return;
+    }
+
+    document.getElementById('voiceStatus').textContent = '⏳ 正在识别...';
+
+    const totalLen = this.pcmData.reduce((sum, arr) => sum + arr.length, 0);
+    const combined = new Int16Array(totalLen);
+    let offset = 0;
+    for (const arr of this.pcmData) {
+      combined.set(arr, offset);
+      offset += arr.length;
+    }
+    this.pcmData = [];
+    const base64 = this._int16ToBase64(combined);
+
+    try {
+      const result = await window.api.recognizeSpeech(base64);
+      if (result.error) {
+        document.getElementById('voiceStatus').textContent = '❌ ' + result.error;
+        setTimeout(() => { document.getElementById('voiceStatus').textContent = ''; }, 5000);
+        return;
+      }
+      state.voiceTranscript = result.text || '';
+      if (state.voiceTranscript) {
+        const ta = document.getElementById('entryContent');
+        ta.value += (ta.value ? ' ' : '') + state.voiceTranscript;
+        document.getElementById('charCount').textContent = ta.value.length;
+        this.saveToHistory(state.voiceTranscript);
+        document.getElementById('voiceStatus').textContent = '';
+      } else {
+        document.getElementById('voiceStatus').textContent = '未识别到语音';
+        setTimeout(() => { document.getElementById('voiceStatus').textContent = ''; }, 2000);
+      }
+    } catch (err) {
+      document.getElementById('voiceStatus').textContent = '❌ 识别请求失败';
+      setTimeout(() => { document.getElementById('voiceStatus').textContent = ''; }, 3000);
     }
   },
 
-  saveToTranscript(text) {
-    this.saveToHistory(text);
+  _int16ToBase64(arr) {
+    const bytes = new Uint8Array(arr.buffer);
+    let bin = '';
+    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return btoa(bin);
   },
 
   saveToHistory(text) {
-    const blob = state.audioChunks.length > 0 ? new Blob(state.audioChunks, { type: 'audio/webm' }) : null;
-    this.voiceHistory.unshift({ text, blob, time: Date.now() });
+    this.voiceHistory.unshift({ text, blob: null, time: Date.now() });
     if (this.voiceHistory.length > 10) this.voiceHistory.pop();
     this.renderHistory();
   },
@@ -644,7 +712,6 @@ const voiceRecorder = {
       <div class="voice-history-item">
         <span class="vh-text" title="${this.escHtml(item.text)}">${this.escHtml(item.text)}</span>
         <span class="vh-actions">
-          ${item.blob ? `<button class="vh-btn" onclick="voiceRecorder.playAudio(${idx})" title="播放">▶️</button>` : ''}
           <button class="vh-btn" onclick="voiceRecorder.reRecord(${idx})" title="重新录音">🔄</button>
           <button class="vh-btn" onclick="voiceRecorder.deleteHistory(${idx})" title="删除">❌</button>
         </span>
@@ -655,30 +722,17 @@ const voiceRecorder = {
   async reRecord(idx) {
     if (state.isRecording) return alert('正在录音中，请先停止');
     document.getElementById('voiceStatus').textContent = '🔄 重新录音...';
-    state.voiceTranscript = '';
-    state.audioChunks = [];
     await this.startRecording();
-    // Wait for recording to finish, then replace
     const checkDone = setInterval(() => {
       if (!state.isRecording) {
         clearInterval(checkDone);
         if (state.voiceTranscript) {
-          // Also insert at cursor position
           const ta = document.getElementById('entryContent');
           ta.value += (ta.value ? ' ' : '') + state.voiceTranscript;
           document.getElementById('charCount').textContent = ta.value.length;
         }
       }
     }, 200);
-  },
-
-  playAudio(idx) {
-    const item = this.voiceHistory[idx];
-    if (!item || !item.blob) return;
-    const url = URL.createObjectURL(item.blob);
-    const audio = new Audio(url);
-    audio.onended = () => URL.revokeObjectURL(url);
-    audio.play();
   },
 
   deleteHistory(idx) {

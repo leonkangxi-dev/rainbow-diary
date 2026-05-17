@@ -78,10 +78,22 @@
             </label>
           </div>
         </div>
+        <div class="config-row" id="xfConfigRow">
+          <p class="setting-desc">使用讯飞语音听写 API（前往 <a href="https://www.xfyun.cn/" target="_blank">xfyun.cn</a> 注册获取）</p>
+          <div class="input-group" style="margin-top:8px">
+            <input type="text" id="xfAppid" class="input-field" placeholder="APPID" onchange="settings.setXfConfig()">
+            <input type="text" id="xfApiKey" class="input-field" placeholder="API Key" onchange="settings.setXfConfig()" style="margin-top:6px">
+            <input type="text" id="xfApiSecret" class="input-field" placeholder="API Secret" onchange="settings.setXfConfig()" style="margin-top:6px">
+          </div>
+          <p id="xfStatus" class="success-msg hidden"></p>
+        </div>
       </div>
 
       <div class="settings-section">
         <h3>👨‍👩‍👧‍👦 管理孩子账号</h3>
+        <div style="margin-bottom:10px">
+          <button class="btn btn-backup btn-sm" onclick="backup.importBackup()">📂 恢复备份</button>
+        </div>
         <div class="child-list" id="childList">
           <!-- 由 JS 动态渲染 -->
         </div>

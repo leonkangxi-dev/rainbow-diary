@@ -38,5 +38,16 @@ contextBridge.exposeInMainWorld('api', {
   // Achievements
   getAchievements: (userId) => ipcRenderer.invoke('achievements:list', userId),
   createAchievement: (data) => ipcRenderer.invoke('achievements:add', data),
-  getUserStats: (userId) => ipcRenderer.invoke('users:stats', userId)
+  getUserStats: (userId) => ipcRenderer.invoke('users:stats', userId),
+
+  // Speech Recognition
+  recognizeSpeech: (audioBase64) => ipcRenderer.invoke('speech:recognize', audioBase64),
+
+  // LAN Server
+  startServer: () => ipcRenderer.invoke('server:start'),
+  stopServer: () => ipcRenderer.invoke('server:stop'),
+
+  // Backup / Restore
+  exportChildBackup: (childId) => ipcRenderer.invoke('backup:export', childId),
+  importChildBackup: () => ipcRenderer.invoke('backup:import')
 });
